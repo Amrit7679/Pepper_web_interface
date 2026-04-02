@@ -1,0 +1,139 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pepper Robot</title>
+<link rel="stylesheet" href="{% static "app/css/style.css" %}">
+<link rel="icon" href="{% static "app/favicon.ico" %}" type="image/x-icon">
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div class="titlebar">
+  <div class="titlebar-left">
+    <div class="titlebar-icon"></div>
+    <span class="titlebar-name">Pepper Robot Companion</span>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-title">Pepper Desktop Interface</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-section">Quick Actions</div>
+    <button class="action-btn" onclick="quickAction('wave','happy')">Wave</button>
+    <button class="action-btn" onclick="quickAction('dance','excited')">Dance</button>
+    <button class="action-btn" onclick="quickAction('forward','walk')">Walk</button>
+    <button class="action-btn" onclick="quickAction('rest','idle')">Rest</button>
+    <button class="action-btn" onclick="quickAction('pushup','happy')">Pushup</button>
+    <button class="action-btn" onclick="quickAction('crab','excited')">Crab Walk</button>
+    <button class="action-btn" onclick="quickAction('swim','happy')">Swim</button>
+    <button class="action-btn" onclick="quickAction('bow','happy')">Bow</button>
+    <button class="action-btn" onclick="quickAction('stand','idle')">Stop</button>
+    <button class="refresh-btn" onclick="refreshStatus()">↻ Refresh Status</button>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center">
+    <div class="panel-header">
+      <span class="panel-title">Conversation</span>
+      <span class="panel-tag" id="mode-tag">TEXT MODE</span>
+    </div>
+
+    <div class="conversation" id="conversation">
+      <!-- messages injected here -->
+    </div>
+
+    <div class="typing-indicator" id="typing">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+
+    <div class="input-bar">
+      <input
+        class="input-field"
+        id="text-input"
+        type="text"
+        placeholder="Type a message or command..."
+        onkeydown="if(event.key==='Enter') sendText()"
+      />
+      <button class="mic-btn" id="mic-btn" onclick="toggleMic()">MIC</button>
+      <button class="send-btn" id="send-btn" onclick="sendText()">Send</button>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+
+    <!-- Settings -->
+    <div class="right-section">
+      <div class="right-section-title">Settings</div>
+
+      <div class="setting-row">
+        <span class="setting-label">Voice Mode</span>
+        <label class="toggle">
+          <input type="checkbox" id="voice-toggle" checked onchange="toggleVoiceMode(this)"/>
+          <div class="toggle-track"><div class="toggle-knob"></div></div>
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <span class="setting-label">Wake Word (hey Pepper)</span>
+        <label class="toggle">
+          <input type="checkbox" id="wake-toggle" onchange="toggleWakeWord(this)"/>
+          <div class="toggle-track"><div class="toggle-knob"></div></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Robot Info -->
+     <div class="right-section">
+      <div class="right-section-title">Robot Info</div>
+      <div class="info-grid">
+        <span class="info-key">IP</span>
+        <span class="info-val highlight" id="robot-ip">—</span>
+        <span class="info-key">Face</span>
+        <span class="info-val unknown" id="robot-face">unknown</span>
+        <span class="info-key">Command</span>
+        <span class="info-val unknown" id="robot-cmd">none</span>
+        <span class="info-key">Broker</span>
+        <span class="info-val" id="broker-val" style="color:var(--text3)">localhost:1883</span>
+      </div>
+
+      <div class="mqtt-bar">
+        <div class="mqtt-info">
+          Topic: <span>Pepper/control</span><br>
+          Status: <span id="mqtt-status-text">offline</span>
+        </div>
+        <button class="mqtt-connect-btn" onclick="checkMQTT()">Check</button>
+      </div>
+
+      <div class="last-cmd-display" id="last-cmd">
+        <span style="color:var(--text3)">No command sent yet</span>
+      </div>
+    </div>
+
+    <!-- Available Commands -->
+    <div class="right-section">
+      <div class="right-section-title">Available Commands</div>
+      <div class="cmd-list" id="cmd-list">
+        <!-- injected by JS -->
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="{% static "app/js/script.js" %}"></script>
+</body>
+</html>
