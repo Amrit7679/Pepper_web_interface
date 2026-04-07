@@ -7,21 +7,51 @@ A Django-based desktop interface for controlling and conversing with a **Pepper 
 ---
 
 ```
-project/
-├── app/                        # Frontend app — serves the HTML page
-│   ├── views.py                # HomeView — renders index.html
-│   ├── urls.py                 # GET / → HomeView
-│   └── static/app/
-│       ├── css/style.css
-│       ├── js/script.js
-│       └── favicon.ico
+Backend/
 │
-├── api/                        # Backend app — handles all robot API logic
-│   ├── views.py                # StatusView, QuickView, ChatView, VoiceView, SettingsView
-│   └── urls.py                 # all routes under /api/
+├── api/
+│   ├── __pycache__/
+│   ├── migrations/
+│   ├── __init__.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── models.py
+│   ├── tests.py
+│   ├── urls.py
+│   └── views.py
 │
-├── templates/app/
-│   └── index.html
+├── app/
+│   ├── __pycache__/
+│   ├── migrations/
+│   ├── static/
+│   │   └── app/
+│   │       ├── css/
+│   │       │   └── style.css
+│   │       ├── js/
+│   │       │   └── script.js
+│   │       └── favicon.ico
+│   │
+│   ├── templates/
+│   │   └── app/
+│   │       └── index.html
+│   │
+│   ├── __init__.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── models.py
+│   ├── tests.py
+│   ├── urls.py
+│   └── views.py
+│
+├── project/
+│   ├── __pycache__/
+│   ├── __init__.py
+│   ├── asgi.py
+│   ├── settings.py
+│   ├── urls.py
+│   └── wsgi.py
+│
+├── db.sqlite3
 └── manage.py
 
 ```

@@ -9,14 +9,18 @@
   const API_STATUS    = 'status/';
   // API endpoint for sending text chat messages to the robot
   const API_TEXT      = 'chat/';
-  const API_VOICE     = 'voice/';
   const API_SETTINGS  = 'settings/'
  
   // ── STATE ───────────────────────────────────────────────
   let isRecording   = false;  // Whether the microphone is currently recording audio
   let isSending     = false;  // Whether a network request is in progress (prevents duplicate sends)
+  let isTextRequestMode = true;
+
+  let wakeWordEnabled    = false;   // Controlled by the toggle
+  let wakeRecognition    = null;    // Dedicated always-on SpeechRecognition for wake word
+  let isWakeListening    = false;   // Whether wake listener is currently running
   
-  let currentTTS    = 'pyttsx3'; // Currently selected TTS engine ('pyttsx3' or 'gemini')
+
   // let mediaRecorder = null;   // MediaRecorder instance used for audio capture
   // let audioChunks   = [];     // Collected audio data chunks during recording
 
@@ -189,13 +193,14 @@
     addUserMsg(text);
     setTyping(true);
     setSending(true);
+    isTextRequestMode = true;
  
     try {
       const res = await fetch(DJANGO_BASE + API_TEXT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json',
                    'X-CSRFToken': getCookie('csrftoken') },
-        body: JSON.stringify({ message: text, tts: currentTTS })
+        body: JSON.stringify({ message: text, TextMode: isTextRequestMode})
       });
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
 
@@ -218,6 +223,7 @@
       input.value = text;
       input.focus();
     } finally {
+      isTextRequestMode = false;
       setSending(false);
     }
   }
@@ -250,6 +256,8 @@
       return;
     }
 
+    if (wakeWordEnabled && isWakeListening) pauseWakeWord();
+
     try {
       recognition = new SpeechRecognition();
       recognition.lang = 'en-US';
@@ -280,11 +288,13 @@
     recognition.onend = () => {
       // Auto-cleanup after the sentence is captured and continuous mode ends.
       stopRecording();
+      if (wakeWordEnabled) resumeWakeWord();
     };
 
     recognition.start();
     } catch(e) {
       logSystem('ERR', `Mic error: ${e.message}`);
+      if (wakeWordEnabled) resumeWakeWord();
     }
   }
  
@@ -314,6 +324,7 @@
     if (!text || isSending) return;
     
     addUserMsg(`🎙 ${text}`);
+    isTextRequestMode = false;
     setTyping(true);
     setSending(true);
     logSystem('OK', 'Processing voice...');
@@ -322,7 +333,7 @@
       const res  = await fetch(DJANGO_BASE + API_TEXT, {
         method: 'POST',
         headers: { 'X-CSRFToken': getCookie('csrftoken') },
-        body: JSON.stringify({ message: text, tts: currentTTS})
+        body: JSON.stringify({ message: text, TextMode: isTextRequestMode})
       });
 
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
@@ -341,8 +352,144 @@
       setTyping(false);
       logSystem('ERR', `Voice error: ${e.message}`);
     } finally {
+      isTextRequestMode = true;
       setSending(false);
     }
+  }
+
+
+  // ── WAKE WORD ────────────────────────────────────────────
+  /**
+   * Starts an always-on, continuous SpeechRecognition instance that listens for
+   * the wake word "hey pepper". Once detected, it automatically opens the mic for
+   * the user's next utterance (the actual command/conversation input).
+   *
+   * Architecture:
+   *  - wakeRecognition  → continuous, low-priority listener, only checks for wake word
+   *  - After wake word detected → pause wakeRecognition, call startRecording() for real input
+   *  - After real input finishes → resume wakeRecognition (handled in startRecording onend)
+   */
+
+    function startWakeWordListener() {
+    if (!SpeechRecognition) {
+      logSystem('WARN', 'Wake word not available: Web Speech API unsupported.');
+      return;
+    }
+ 
+    if (isWakeListening) return; // already running
+ 
+    wakeRecognition = new SpeechRecognition();
+    wakeRecognition.lang           = 'en-US';
+    wakeRecognition.continuous     = true;   // Keep listening indefinitely
+    wakeRecognition.interimResults = true;   // Check partial results for wake word
+ 
+    wakeRecognition.onresult = (event) => {
+      // Scan every result (interim + final) for the wake word
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript.trim().toLowerCase();
+        if (transcript.includes(WAKE_WORD)) {
+          logSystem('OK', `🎙 Wake word detected: "<b>${WAKE_WORD}</b>" — listening...`);
+          pauseWakeWord();         // Stop background listener
+          startRecording();        // Open mic for user's real message
+          break;
+        }
+      }
+    };
+ 
+    wakeRecognition.onerror = (event) => {
+      // 'no-speech' and 'aborted' are normal; only log actual errors
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        logSystem('WARN', `Wake word listener error: ${event.error}`);
+      }
+      isWakeListening = false;
+      // Auto-restart unless disabled
+      if (wakeWordEnabled) {
+        setTimeout(resumeWakeWord, 500);
+      }
+    };
+ 
+    wakeRecognition.onend = () => {
+      isWakeListening = false;
+      // Chrome stops continuous recognition after ~60s silence; restart automatically
+      if (wakeWordEnabled && !isRecording) {
+        setTimeout(resumeWakeWord, 300);
+      }
+    };
+ 
+    try {
+      wakeRecognition.start();
+      isWakeListening = true;
+    } catch(e) {
+      logSystem('WARN', `Wake word start error: ${e.message}`);
+    }
+  }
+
+
+
+    /** Pause wake word listener (e.g. while manual mic is active). */
+  function pauseWakeWord() {
+    if (wakeRecognition && isWakeListening) {
+      try { wakeRecognition.abort(); } catch(_) {}
+      isWakeListening = false;
+    }
+  }
+ 
+  /** Resume wake word listener after pause. */
+  function resumeWakeWord() {
+    if (!wakeWordEnabled || isRecording) return;
+    startWakeWordListener();
+  }
+ 
+  /** Stop and tear down the wake word listener permanently. */
+  function stopWakeWordListener() {
+    wakeWordEnabled = false;
+    if (wakeRecognition) {
+      try { wakeRecognition.abort(); } catch(_) {}
+      wakeRecognition = null;
+    }
+    isWakeListening = false;
+  }
+
+  
+
+    // ── SETTINGS ─────────────────────────────────────────────
+  /**
+   * Toggle handler for the "Wake Word (hey Pepper)" switch.
+   * Enables/disables the always-on background wake word listener.
+   */
+  function toggleWakeWord(cb) {
+    wakeWordEnabled = cb.checked;
+    logSystem('OK', `Wake word ${cb.checked ? '<b>enabled</b> — say "hey pepper"' : 'disabled'}`);
+ 
+    if (wakeWordEnabled) {
+      startWakeWordListener();
+    } else {
+      stopWakeWordListener();
+    }
+ 
+    // Persist preference to backend
+    fetch(DJANGO_BASE + API_SETTINGS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({ wake_word: cb.checked })
+    }).catch(() => {});
+  }
+
+
+
+    // ── TTS (Text-to-Speech) ─────────────────────────────────
+  /**
+   * Speak the robot's response aloud using the Web Speech Synthesis API.
+   * Only fires during voice mode (isTextRequestMode = false).
+   */
+  function speakResponse(text) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel(); // Cancel any ongoing speech
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate   = 1.1;
+    utter.pitch  = 1.3;  // Slightly higher pitch for robot character
+    utter.volume = 1.0;
+    window.speechSynthesis.speak(utter);
   }
  
   // ── STATUS ───────────────────────────────────────────────
@@ -454,38 +601,10 @@
   }
 
   
+
  
-  /**
-   * Handles the Voice Mode toggle switch in the Settings panel.
-   * Updates the `voiceMode` state variable and reflects the active mode
-   * in the conversation panel header tag ("VOICE MODE" / "TEXT MODE").
-   *  - The checkbox element that triggered the change
-   */
- 
-  /**
-   * Handles the Wake Word toggle switch ("hey sesame") in the Settings panel.
-   * POSTs the new wake word enabled/disabled state to the backend settings endpoint.
-   * Errors are silently swallowed since this is a non-critical preference.
-   * @param {HTMLInputElement} cb - The checkbox element that triggered the change
-   */
-  function toggleWakeWord(cb) {
-    logSystem('OK', `Wake word ${cb.checked ? 'enabled' : 'disabled'}`);
-    fetch(DJANGO_BASE + API_SETTINGS, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-      body: JSON.stringify({ wake_word: cb.checked })
-    }).catch(() => {});
-  }
- 
-  /**
-   * Updates the currently selected TTS engine and logs the change.
-   * Called when the user selects a TTS radio option in the Settings panel.
-   * @param {string} engine - The chosen TTS engine identifier ('pyttsx3' or 'gemini')
-   */
-  function setTTS(engine) {
-    currentTTS = engine;
-    logSystem('OK', `TTS engine: ${engine}`);
-  }
+  
+
  
   /**
    * Retrieves the value of a browser cookie by name.
