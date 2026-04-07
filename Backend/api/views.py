@@ -321,3 +321,8 @@ def settings(request):
         "status":    "ok",
     })
 
+def stream(request):
+    if request.method != "POST":
+        return JsonResponse({"err": "Bad requset"}, status=404)
+
+    

@@ -10,5 +10,6 @@ urlpatterns = [
     path('quick/', views.quick, name='quick'),
     path('chat/', views.chat, name='chat'),
     path('settings/', views.settings, name='settings'),
+    path('stream/', views.stream, name="stream")
 ]
 
