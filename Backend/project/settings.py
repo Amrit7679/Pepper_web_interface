@@ -25,7 +25,10 @@ SECRET_KEY = 'django-insecure-q&a&#(y&g8ok#b8y_ic58)hlw%wn8xhv6_)x$q3b!$)=*3m*w&
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
+
+# NEW: Required for Django 4.0+ to accept POST requests from a different device
+CSRF_TRUSTED_ORIGINS = ['http://192.168.31.95:8000']
 
 
 # Application definition

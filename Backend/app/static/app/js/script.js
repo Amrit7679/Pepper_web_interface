@@ -15,10 +15,13 @@
   // ── STATE ───────────────────────────────────────────────
   let isRecording   = false;  // Whether the microphone is currently recording audio
   let isSending     = false;  // Whether a network request is in progress (prevents duplicate sends)
-  let voiceMode     = true;   // Whether voice mode is enabled (allows mic usage)
+  
   let currentTTS    = 'pyttsx3'; // Currently selected TTS engine ('pyttsx3' or 'gemini')
-  let mediaRecorder = null;   // MediaRecorder instance used for audio capture
-  let audioChunks   = [];     // Collected audio data chunks during recording
+  // let mediaRecorder = null;   // MediaRecorder instance used for audio capture
+  // let audioChunks   = [];     // Collected audio data chunks during recording
+
+  let recognition   = null; 
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
  
   // Full list of supported robot movement/body commands
   const MOVE_COMMANDS = [
@@ -227,7 +230,6 @@
    * If idle, starts a new recording session.
    */
   async function toggleMic() {
-    if (!voiceMode) { logSystem('WARN', 'Enable Voice Mode first'); return; }
  
     if (isRecording) {
       stopRecording();
@@ -243,23 +245,44 @@
    * - Updates the UI to show the recording state (button label, input highlight).
    */
   async function startRecording() {
+    if (!SpeechRecognition) {
+      logSystem('ERR', 'Web Speech API is not supported in this browser.');
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream);
-      audioChunks   = [];
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+
+      recognition.interimResults = false; // Only returns the final, stable transcript.
+      recognition.continuous = false;    // Stops automatically after the speaker finishes a sentence.
  
-      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-      mediaRecorder.onstop = sendAudio;
-      mediaRecorder.start();
- 
+      recognition.onstart = () => {
       isRecording = true;
       document.getElementById('mic-btn').classList.add('recording');
       document.getElementById('mic-btn').textContent = '■ STOP';
       document.getElementById('text-input').disabled = true;
       document.getElementById('text-input').classList.add('listening');
-      document.getElementById('text-input').placeholder = 'Listening...';
+      document.getElementById('text-input').placeholder = 'Listening for a full sentence...';
       document.getElementById('send-btn').disabled = true;
-      logSystem('OK', 'Recording started');
+      logSystem('OK', 'Microphone active - Speak your sentence.');
+    };
+    recognition.onresult = (event) => {
+      // This triggers ONLY when the browser is confident the sentence is complete.
+      const transcript = event.results[0][0].transcript;
+      sendAudio(transcript);
+    };
+    recognition.onerror = (event) => {
+      logSystem('ERR', `Speech error: ${event.error}`);
+      stopRecording();
+    };
+
+    recognition.onend = () => {
+      // Auto-cleanup after the sentence is captured and continuous mode ends.
+      stopRecording();
+    };
+
+    recognition.start();
     } catch(e) {
       logSystem('ERR', `Mic error: ${e.message}`);
     }
@@ -270,9 +293,8 @@
    * Resets the mic button label and input field placeholder back to default state.
    */
   function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    if (recognition) {
+    recognition.stop();
     }
     isRecording = false;
     document.getElementById('mic-btn').classList.remove('recording');
@@ -283,32 +305,32 @@
     document.getElementById('send-btn').disabled = false;
   }
  
-  /**
-   * Packages the recorded audio chunks into a Blob and POSTs it to the voice API.
-   * - Sends the current TTS preference alongside the audio file.
-   * - On success, displays the transcription as a user message and the robot's reply.
-   * - Updates the robot info panel and last-command display if a command was returned.
-   */
-  async function sendAudio() {
-    const blob    = new Blob(audioChunks, { type: 'audio/webm' });
-    const formData = new FormData();
-    formData.append('audio', blob, 'recording.webm');
-    formData.append('tts', currentTTS);
- 
+/**
+  This function take transcript and send to API_TEXT for response ..  
+ **/
+
+
+  async function sendAudio(text) {
+    if (!text || isSending) return;
+    
+    addUserMsg(`🎙 ${text}`);
     setTyping(true);
     setSending(true);
     logSystem('OK', 'Processing voice...');
  
     try {
-      const res  = await fetch(DJANGO_BASE + API_VOICE, {
+      const res  = await fetch(DJANGO_BASE + API_TEXT, {
         method: 'POST',
         headers: { 'X-CSRFToken': getCookie('csrftoken') },
-        body: formData
+        body: JSON.stringify({ message: text, tts: currentTTS})
       });
+
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+
       const data = await res.json();
       setTyping(false);
  
-      if (data.transcript) addUserMsg(`🎙 ${data.transcript}`);
+      
       addRobotMsg(data.response || '...', data.command, data.face);
  
       if (data.command || data.face) {
@@ -401,7 +423,7 @@
    */
   function flashLastCmd(movement, face) {
     const el = document.getElementById('last-cmd');
-    el.innerHTML = `<span class="cmd-topic">Pepper/control  →  </span><span class="cmd-sent">"${movement},${face}"</span>`;
+    el.innerHTML = `<span class="cmd-topic">Pepper8697803647/control8697803647  →  </span><span class="cmd-sent">"${movement},${face}"</span>`;
     el.classList.remove('flash');
     void el.offsetWidth; // Force reflow to restart the CSS animation
     el.classList.add('flash');
@@ -437,13 +459,8 @@
    * Handles the Voice Mode toggle switch in the Settings panel.
    * Updates the `voiceMode` state variable and reflects the active mode
    * in the conversation panel header tag ("VOICE MODE" / "TEXT MODE").
-   * @param {HTMLInputElement} cb - The checkbox element that triggered the change
+   *  - The checkbox element that triggered the change
    */
-  function toggleVoiceMode(cb) {
-    voiceMode = cb.checked;
-    document.getElementById('mode-tag').textContent = voiceMode ? 'VOICE MODE' : 'TEXT MODE';
-    logSystem('OK', `Voice mode ${voiceMode ? 'enabled' : 'disabled'}`);
-  }
  
   /**
    * Handles the Wake Word toggle switch ("hey sesame") in the Settings panel.

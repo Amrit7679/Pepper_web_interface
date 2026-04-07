@@ -46,7 +46,7 @@
   <div class="center">
     <div class="panel-header">
       <span class="panel-title">Conversation</span>
-      <span class="panel-tag" id="mode-tag">TEXT MODE</span>
+      <span class="panel-tag" id="mode-tag">TEXT/VOICE MODE</span>
     </div>
 
     <div class="conversation" id="conversation">
@@ -78,15 +78,6 @@
     <!-- Settings -->
     <div class="right-section">
       <div class="right-section-title">Settings</div>
-
-      <div class="setting-row">
-        <span class="setting-label">Voice Mode</span>
-        <label class="toggle">
-          <input type="checkbox" id="voice-toggle" checked onchange="toggleVoiceMode(this)"/>
-          <div class="toggle-track"><div class="toggle-knob"></div></div>
-        </label>
-      </div>
-
       <div class="setting-row">
         <span class="setting-label">Wake Word (hey Pepper)</span>
         <label class="toggle">
@@ -112,7 +103,7 @@
 
       <div class="mqtt-bar">
         <div class="mqtt-info">
-          Topic: <span>Pepper/control</span><br>
+          Topic: <span>Pepper8697803647/control8697803647</span><br>
           Status: <span id="mqtt-status-text">offline</span>
         </div>
         <button class="mqtt-connect-btn" onclick="checkMQTT()">Check</button>
